@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Proxy Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb bg-orb-a"></div>
+    <div class="bg-orb bg-orb-b"></div>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <h1>LLM Proxy Admin</h1>
+          <p>Zentrale Verwaltung fuer Worker, Tokens und Laufzeitstatus</p>
+        </div>
+        <button id="reloadBtn" class="btn btn-ghost">Neu laden</button>
+      </header>
+
+      <section class="panel auth-panel">
+        <h2>API Zugang</h2>
+        <div class="grid-2">
+          <label>
+            Backend URL
+            <input id="apiBase" value="http://localhost:8080" />
+          </label>
+          <label>
+            Admin JWT (OIDC)
+            <input id="adminToken" type="password" placeholder="eyJ..." />
+          </label>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <article class="stat-card">
+          <h3>Worker</h3>
+          <strong id="statWorkers">0</strong>
+        </article>
+        <article class="stat-card">
+          <h3>Modelle</h3>
+          <strong id="statModels">0</strong>
+        </article>
+        <article class="stat-card">
+          <h3>Tokens</h3>
+          <strong id="statTokens">0</strong>
+        </article>
+        <article class="stat-card">
+          <h3>Requests / 1m</h3>
+          <strong id="statReq1m">0</strong>
+        </article>
+        <article class="stat-card">
+          <h3>Tokens / 1m</h3>
+          <strong id="statTok1m">0</strong>
+        </article>
+        <article class="stat-card">
+          <h3>Tokens / 24h</h3>
+          <strong id="statTok24h">0</strong>
+        </article>
+      </section>
+
+      <section class="panel split">
+        <div>
+          <h2>Worker registrieren</h2>
+          <form id="workerForm" class="form-grid">
+            <input name="name" placeholder="Name" required />
+            <input name="base_url" placeholder="http://10.0.0.10:8000" required />
+            <input name="api_key" placeholder="Optional API Key" />
+            <input name="tenant_id" type="number" placeholder="Tenant ID" value="1" />
+            <input name="capacity_hint" type="number" placeholder="Capacity Hint" value="4" />
+            <button class="btn" type="submit">Worker anlegen</button>
+          </form>
+          <div id="workerMsg" class="hint"></div>
+        </div>
+
+        <div>
+          <h2>Token erstellen</h2>
+          <form id="tokenForm" class="form-grid">
+            <input name="label" placeholder="Label" required />
+            <input name="tenant_id" type="number" placeholder="Tenant ID" value="1" />
+            <input name="quota_requests_per_min" type="number" placeholder="Requests/min" value="60" />
+            <input name="quota_tokens_per_day" type="number" placeholder="Tokens/Tag" value="1000000" />
+            <label class="toggle-row">
+              <input name="debug_enabled" type="checkbox" />
+              Debug Logging aktivieren
+            </label>
+            <button class="btn" type="submit">Token erzeugen</button>
+          </form>
+          <div id="tokenMsg" class="hint"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Worker Uebersicht</h2>
+        <div id="workersTable" class="table-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Token Uebersicht</h2>
+        <div id="tokensTable" class="table-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Live Usage</h2>
+        <div id="usageTable" class="table-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Request Logs</h2>
+        <form id="logsFilterForm" class="form-grid logs-filter-grid">
+          <input name="token_id" placeholder="Filter: Token ID" />
+          <input name="model" placeholder="Filter: Model" />
+          <input name="limit" type="number" value="100" min="1" max="500" />
+          <button class="btn btn-ghost" type="submit">Filter anwenden</button>
+        </form>
+        <div id="logsTable" class="table-wrap"></div>
+      </section>
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

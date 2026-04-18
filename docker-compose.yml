@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: llm-proxy-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: llm_proxy
+      MARIADB_USER: llm_proxy
+      MARIADB_PASSWORD: llm_proxy
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: llm-proxy-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: llm-proxy-backend
+    environment:
+      APP_ENV: development
+      HTTP_ADDR: :8080
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: llm_proxy
+      DB_USER: llm_proxy
+      DB_PASSWORD: llm_proxy
+      DB_MAX_OPEN_CONNS: 25
+      DB_MAX_IDLE_CONNS: 25
+      REDIS_ADDR: redis:6379
+      WORKER_SYNC_INTERVAL_SEC: 30
+      WORKER_PROBE_TIMEOUT_SEC: 10
+      OIDC_ISSUER_URL: http://localhost:9090/realms/llm-proxy
+      OIDC_CLIENT_ID: llm-proxy-admin
+      OIDC_CLIENT_SECRET: change-me
+      OIDC_AUDIENCE: llm-proxy-admin-api
+      OIDC_ADMIN_SCOPES: admin
+      OIDC_ADMIN_ROLES: admin
+    ports:
+      - "8080:8080"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mariadb_data:
