@@ -111,6 +111,10 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 2. Backend Health pruefen:
    - `curl http://localhost:8080/healthz`
 
+### MITM/Private CA Build-Umgebung
+
+Der Backend-Build uebernimmt CA-Zertifikate vom Host-Pfad `/usr/local/share/ca-certificates` in den Build-Container und fuehrt `update-ca-certificates` aus. In `docker-compose.yml` ist dafuer ein zusaetzlicher Build-Context (`host_certs`) hinterlegt.
+
 ## Naechste Implementierungsschritte
 
 1. MariaDB-Schema und Migrationen finalisieren

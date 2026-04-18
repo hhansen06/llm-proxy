@@ -34,6 +34,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      additional_contexts:
+        host_certs: /usr/local/share/ca-certificates
     container_name: llm-proxy-backend
     environment:
       APP_ENV: development
