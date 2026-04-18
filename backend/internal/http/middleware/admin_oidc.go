@@ -3,103 +3,104 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+
+	"llm-proxy/backend/internal/config"
 )
 
 type AdminClaims struct {
 	Subject string
 	Scopes  []string
+	Roles   []string
 }
 
 type adminClaimsKey struct{}
-		"errors"
-		"fmt"
 
-		"github.com/coreos/go-oidc/v3/oidc"
+type AdminOIDC struct {
+	verifier       *oidc.IDTokenVerifier
+	audience       string
+	requiredScopes map[string]struct{}
+	requiredRoles  map[string]struct{}
+	clientID       string
+}
 
-		"llm-proxy/backend/internal/config"
-func AdminOIDCRequired(next http.Handler) http.Handler {
+func NewAdminOIDC(cfg config.Config) (*AdminOIDC, error) {
+	if cfg.OIDCIssuerURL == "" {
+		return nil, errors.New("missing OIDC_ISSUER_URL")
+	}
+	if cfg.OIDCClientID == "" {
+		return nil, errors.New("missing OIDC_CLIENT_ID")
+	}
+
+	provider, err := oidc.NewProvider(context.Background(), cfg.OIDCIssuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("init oidc provider: %w", err)
+	}
+
+	verifyCfg := &oidc.Config{ClientID: cfg.OIDCClientID}
+	if cfg.OIDCAudience != "" {
+		verifyCfg = &oidc.Config{SkipClientIDCheck: true}
+	}
+
+	m := &AdminOIDC{
+		verifier:       provider.Verifier(verifyCfg),
+		audience:       cfg.OIDCAudience,
+		requiredScopes: toSet(cfg.OIDCAdminScopes),
+		requiredRoles:  toSet(cfg.OIDCAdminRoles),
+		clientID:       cfg.OIDCClientID,
+	}
+
+	return m, nil
+}
+
+func (m *AdminOIDC) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if auth == "" || !strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-			w.WriteHeader(http.StatusUnauthorized)
-		Roles   []string
-			_ = json.NewEncoder(w).Encode(map[string]any{"error": "missing admin bearer token"})
+		token, err := parseBearerToken(r.Header.Get("Authorization"))
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
-	type AdminOIDC struct {
-		verifier       *oidc.IDTokenVerifier
-		audience       string
-		requiredScopes map[string]struct{}
-		requiredRoles  map[string]struct{}
-		clientID       string
-	}
-
-	func NewAdminOIDC(cfg config.Config) (*AdminOIDC, error) {
-		if cfg.OIDCIssuerURL == "" {
-			return nil, errors.New("missing OIDC_ISSUER_URL")
-		}
-		if cfg.OIDCClientID == "" {
-			return nil, errors.New("missing OIDC_CLIENT_ID")
-		}
-
-		provider, err := oidc.NewProvider(context.Background(), cfg.OIDCIssuerURL)
+		idToken, err := m.verifier.Verify(r.Context(), token)
 		if err != nil {
-			return nil, fmt.Errorf("init oidc provider: %w", err)
+			writeJSONError(w, http.StatusUnauthorized, "oidc token verification failed")
+			return
 		}
 
-		verifyCfg := &oidc.Config{ClientID: cfg.OIDCClientID}
-		if cfg.OIDCAudience != "" {
-			verifyCfg = &oidc.Config{SkipClientIDCheck: true}
+		var raw map[string]any
+		if err := idToken.Claims(&raw); err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "invalid oidc token claims")
+			return
 		}
 
-		m := &AdminOIDC{
-			verifier:       provider.Verifier(verifyCfg),
-			audience:       cfg.OIDCAudience,
-			requiredScopes: toSet(cfg.OIDCAdminScopes),
-			requiredRoles:  toSet(cfg.OIDCAdminRoles),
-			clientID:       cfg.OIDCClientID,
+		if m.audience != "" && !audienceContains(raw["aud"], m.audience) {
+			writeJSONError(w, http.StatusForbidden, "token audience not allowed")
+			return
 		}
 
-		return m, nil
-	}
+		scopes := extractScopes(raw["scope"])
+		roles := extractRoles(raw, m.clientID)
+		if !m.authorized(scopes, roles) {
+			writeJSONError(w, http.StatusForbidden, "insufficient admin permissions")
+			return
+		}
 
-	func (m *AdminOIDC) Require(next http.Handler) http.Handler {
-		if token == "" {
-			token, err := parseBearerToken(r.Header.Get("Authorization"))
-			if err != nil {
-				writeJSONError(w, http.StatusUnauthorized, err.Error())
-
-		// Placeholder: OIDC validation (issuer, audience, signature, exp, roles/scopes)
-		claims := AdminClaims{Subject: "placeholder-admin", Scopes: []string{"admin"}}
-			idToken, err := m.verifier.Verify(r.Context(), token)
-			if err != nil {
-				writeJSONError(w, http.StatusUnauthorized, "oidc token verification failed")
+		subject, _ := raw["sub"].(string)
+		claims := AdminClaims{Subject: subject, Scopes: scopes, Roles: roles}
+		ctx := context.WithValue(r.Context(), adminClaimsKey{}, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
 func AdminClaimsFromContext(ctx context.Context) (AdminClaims, bool) {
 	v := ctx.Value(adminClaimsKey{})
-			var raw map[string]any
-			if err := idToken.Claims(&raw); err != nil {
-				writeJSONError(w, http.StatusUnauthorized, "invalid oidc token claims")
-				return
-			}
-
-			if m.audience != "" && !audienceContains(raw["aud"], m.audience) {
-				writeJSONError(w, http.StatusForbidden, "token audience not allowed")
-				return
-			}
-
-			scopes := extractScopes(raw["scope"])
-			roles := extractRoles(raw, m.clientID)
-			if !m.authorized(scopes, roles) {
-				writeJSONError(w, http.StatusForbidden, "insufficient admin permissions")
-				return
-			}
-
-			subject, _ := raw["sub"].(string)
-			claims := AdminClaims{Subject: subject, Scopes: scopes, Roles: roles}
+	claims, ok := v.(AdminClaims)
+	return claims, ok
 }
 
 func (m *AdminOIDC) authorized(scopes []string, roles []string) bool {
