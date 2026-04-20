@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -46,6 +47,7 @@ func (h *Handlers) RegisterWorker(w http.ResponseWriter, r *http.Request) {
 	baseURL := strings.TrimRight(req.BaseURL, "/")
 	models, err := discoverModels(r.Context(), baseURL, req.APIKey)
 	if err != nil {
+		log.Printf("register worker discovery failed name=%q base_url=%q tenant_id=%d err=%v", req.Name, baseURL, req.TenantID, err)
 		writeErr(w, http.StatusBadRequest, fmt.Sprintf("model discovery failed: %v", err))
 		return
 	}
@@ -56,6 +58,7 @@ func (h *Handlers) RegisterWorker(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.db.ExecContext(r.Context(), insertWorker, nullableTenantID(req.TenantID), req.Name, baseURL, req.APIKey, req.CapacityHint)
 	if err != nil {
+		log.Printf("register worker insert failed name=%q base_url=%q tenant_id=%d err=%v", req.Name, baseURL, req.TenantID, err)
 		status, message := mapWorkerCreateDBError(err, req.TenantID)
 		writeErr(w, status, message)
 		return
@@ -74,6 +77,7 @@ func (h *Handlers) RegisterWorker(w http.ResponseWriter, r *http.Request) {
 
 	for _, model := range models {
 		if _, err := h.db.ExecContext(r.Context(), insertModel, workerID, model); err != nil {
+			log.Printf("register worker model insert failed worker_id=%d model=%q err=%v", workerID, model, err)
 			writeErr(w, http.StatusInternalServerError, "failed to store discovered models")
 			return
 		}
@@ -638,6 +642,11 @@ func mapWorkerCreateDBError(err error, tenantID int64) (int, string) {
 	switch myErr.Number {
 	case 1452:
 		return http.StatusBadRequest, fmt.Sprintf("tenant_id %d does not exist", tenantID)
+	case 1048:
+		if strings.Contains(strings.ToLower(myErr.Message), "tenant_id") {
+			return http.StatusInternalServerError, "database schema is outdated: workers.tenant_id is still NOT NULL; apply migration 0002_workers_global.sql"
+		}
+		return http.StatusBadRequest, "required database column is missing in request"
 	case 1406:
 		return http.StatusBadRequest, "worker payload too long for database column"
 	case 1366:
