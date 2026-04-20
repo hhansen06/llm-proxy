@@ -28,7 +28,8 @@ func (h *Handlers) ListModels(w http.ResponseWriter, r *http.Request) {
 		SELECT DISTINCT wm.model_name
 		FROM worker_models wm
 		JOIN workers w ON w.id = wm.worker_id
-		WHERE w.tenant_id = ? AND w.status IN ('active','degraded')
+		WHERE (w.tenant_id IS NULL OR w.tenant_id = ?)
+		  AND w.status IN ('active','degraded')
 		ORDER BY wm.model_name ASC`
 
 	rows, err := h.db.QueryContext(r.Context(), q, identity.TenantID)
@@ -205,7 +206,7 @@ func (h *Handlers) selectWorkers(ctx context.Context, tenantID int64, modelName 
 		SELECT w.id, w.base_url, IFNULL(w.api_key_encrypted, ''), w.status, w.capacity_hint, w.last_latency_ms
 		FROM workers w
 		JOIN worker_models wm ON wm.worker_id = w.id
-		WHERE w.tenant_id = ?
+		WHERE (w.tenant_id IS NULL OR w.tenant_id = ?)
 		  AND wm.model_name = ?
 		  AND w.status IN ('active','degraded')`
 

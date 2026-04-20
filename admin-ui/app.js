@@ -304,9 +304,16 @@ el.workerForm.addEventListener("submit", async (event) => {
     name: form.get("name"),
     base_url: form.get("base_url"),
     api_key: form.get("api_key") || "",
-    tenant_id: Number(form.get("tenant_id")) || 1,
     capacity_hint: Number(form.get("capacity_hint")) || 1,
   };
+
+  const tenantRaw = String(form.get("tenant_id") || "").trim();
+  if (tenantRaw !== "") {
+    const tenantNum = Number(tenantRaw);
+    if (Number.isFinite(tenantNum) && tenantNum > 0) {
+      payload.tenant_id = tenantNum;
+    }
+  }
 
   try {
     const res = await api("/admin/workers", {

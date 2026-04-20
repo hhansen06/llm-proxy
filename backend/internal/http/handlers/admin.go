@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	mysql "github.com/go-sql-driver/mysql"
 )
 
 func (h *Handlers) RegisterWorker(w http.ResponseWriter, r *http.Request) {
@@ -34,9 +35,6 @@ func (h *Handlers) RegisterWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.TenantID == 0 {
-		req.TenantID = 1
-	}
 	if req.Name == "" || req.BaseURL == "" {
 		writeErr(w, http.StatusBadRequest, "name and base_url are required")
 		return
@@ -56,9 +54,10 @@ func (h *Handlers) RegisterWorker(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO workers (tenant_id, name, base_url, api_key_encrypted, status, capacity_hint, last_health_at, last_latency_ms)
 		VALUES (?, ?, ?, ?, 'active', ?, UTC_TIMESTAMP(), NULL)`
 
-	res, err := h.db.ExecContext(r.Context(), insertWorker, req.TenantID, req.Name, baseURL, req.APIKey, req.CapacityHint)
+	res, err := h.db.ExecContext(r.Context(), insertWorker, nullableTenantID(req.TenantID), req.Name, baseURL, req.APIKey, req.CapacityHint)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "failed to create worker")
+		status, message := mapWorkerCreateDBError(err, req.TenantID)
+		writeErr(w, status, message)
 		return
 	}
 
@@ -108,7 +107,7 @@ func (h *Handlers) ListWorkers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var (
 			id           int64
-			tenantID     int64
+			tenantID     sql.NullInt64
 			name         string
 			baseURL      string
 			status       string
@@ -127,12 +126,15 @@ func (h *Handlers) ListWorkers(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			item = map[string]any{
 				"id":            id,
-				"tenant_id":     tenantID,
+				"tenant_id":     nil,
 				"name":          name,
 				"base_url":      baseURL,
 				"status":        status,
 				"capacity_hint": capacityHint,
 				"models":        []string{},
+			}
+			if tenantID.Valid {
+				item["tenant_id"] = tenantID.Int64
 			}
 			if lastHealthAt.Valid {
 				item["last_health_at"] = lastHealthAt.Time
@@ -572,6 +574,13 @@ func nullableInt64(v *int64) any {
 	return *v
 }
 
+func nullableTenantID(v int64) any {
+	if v <= 0 {
+		return nil
+	}
+	return v
+}
+
 func discoverModels(ctx context.Context, baseURL string, apiKey string) ([]string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/models", nil)
 	if err != nil {
@@ -618,4 +627,22 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": msg})
+}
+
+func mapWorkerCreateDBError(err error, tenantID int64) (int, string) {
+	var myErr *mysql.MySQLError
+	if !errors.As(err, &myErr) {
+		return http.StatusInternalServerError, "failed to create worker"
+	}
+
+	switch myErr.Number {
+	case 1452:
+		return http.StatusBadRequest, fmt.Sprintf("tenant_id %d does not exist", tenantID)
+	case 1406:
+		return http.StatusBadRequest, "worker payload too long for database column"
+	case 1366:
+		return http.StatusBadRequest, "invalid value type for worker payload"
+	default:
+		return http.StatusInternalServerError, "failed to create worker"
+	}
 }

@@ -41,6 +41,7 @@ OpenAI-kompatibler API-Proxy fuer mehrere vLLM-Instanzen mit zentraler Auth, Mul
 ## Verhalten
 
 - Worker-Registrierung triggert Model-Discovery gegen den Worker-Endpunkt `GET /v1/models`.
+- Worker koennen global registriert werden (`tenant_id` weglassen oder `0` senden). Globale Worker sind fuer alle Tenants nutzbar.
 - Ein Hintergrund-Sync prueft periodisch alle nicht-inaktiven Worker und aktualisiert Status, Latenz und Modellliste.
 - Requests werden pro Modell auf passende Worker geroutet.
 - Mehrere Worker pro Modell werden nach Health/Latenz/Kapazitaet gescored.
@@ -127,7 +128,6 @@ curl -X POST http://localhost:8080/admin/workers \
    -H "Authorization: Bearer <admin-oidc-jwt>" \
    -H "Content-Type: application/json" \
    -d '{
-      "tenant_id": 1,
       "name": "vllm-a",
       "base_url": "http://10.0.0.10:8000",
       "api_key": "",
