@@ -55,6 +55,71 @@ OpenAI-kompatibler API-Proxy fuer mehrere vLLM-Instanzen mit zentraler Auth, Mul
 
 ## Kurze API-Beispiele
 
+### Admin JWT von Keycloak holen (curl)
+
+Beispiel-Variablen:
+
+```bash
+KEYCLOAK_URL="https://keycloak.example.internal"
+REALM="llm-proxy"
+CLIENT_ID="llm-proxy-admin"
+CLIENT_SECRET="change-me"
+PROXY_URL="http://localhost:8080"
+```
+
+Variante 1: Client-Credentials-Flow (Service Account)
+
+```bash
+ADMIN_JWT=$(curl -sS -X POST \
+   "$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token" \
+   -H "Content-Type: application/x-www-form-urlencoded" \
+   --data-urlencode "grant_type=client_credentials" \
+   --data-urlencode "client_id=$CLIENT_ID" \
+   --data-urlencode "client_secret=$CLIENT_SECRET" \
+   | jq -r '.access_token')
+
+echo "$ADMIN_JWT" | cut -c1-40
+```
+
+Variante 2: Passwort-Flow (nur wenn in Keycloak explizit erlaubt)
+
+```bash
+KC_USER="admin-user"
+KC_PASS="admin-pass"
+
+ADMIN_JWT=$(curl -sS -X POST \
+   "$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token" \
+   -H "Content-Type: application/x-www-form-urlencoded" \
+   --data-urlencode "grant_type=password" \
+   --data-urlencode "client_id=$CLIENT_ID" \
+   --data-urlencode "client_secret=$CLIENT_SECRET" \
+   --data-urlencode "username=$KC_USER" \
+   --data-urlencode "password=$KC_PASS" \
+   | jq -r '.access_token')
+```
+
+Mit dem JWT gegen die Admin-API:
+
+```bash
+curl -sS -X GET "$PROXY_URL/admin/workers" \
+   -H "Authorization: Bearer $ADMIN_JWT"
+```
+
+Token fuer Clients erzeugen:
+
+```bash
+curl -sS -X POST "$PROXY_URL/admin/tokens" \
+   -H "Authorization: Bearer $ADMIN_JWT" \
+   -H "Content-Type: application/json" \
+   -d '{
+      "tenant_id": 1,
+      "label": "team-a",
+      "debug_enabled": false,
+      "quota_requests_per_min": 60,
+      "quota_tokens_per_day": 1000000
+   }'
+```
+
 Worker registrieren:
 
 ```bash
