@@ -15,6 +15,7 @@ import (
 	"llm-proxy/backend/internal/observability"
 	"llm-proxy/backend/internal/router"
 	"llm-proxy/backend/internal/services"
+	"llm-proxy/backend/internal/store"
 )
 
 func main() {
@@ -32,6 +33,10 @@ func main() {
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("ping db: %v", err)
+	}
+
+	if err := store.ApplyMigrations(context.Background(), db); err != nil {
+		log.Fatalf("apply migrations: %v", err)
 	}
 
 	metrics := observability.NewMetrics()
