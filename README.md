@@ -43,6 +43,7 @@ OpenAI-kompatibler API-Proxy fuer mehrere vLLM-Instanzen mit zentraler Auth, Mul
 - Worker-Registrierung triggert Model-Discovery gegen den Worker-Endpunkt `GET /v1/models`.
 - Worker koennen global registriert werden (`tenant_id` weglassen oder `0` senden). Globale Worker sind fuer alle Tenants nutzbar.
 - Ein Hintergrund-Sync prueft periodisch alle nicht-inaktiven Worker und aktualisiert Status, Latenz und Modellliste.
+- SQL-Migrationen unter `backend/migrations` werden beim Backend-Start automatisch angewendet.
 - Requests werden pro Modell auf passende Worker geroutet.
 - Mehrere Worker pro Modell werden nach Health/Latenz/Kapazitaet gescored.
 - Upstream-Fehler (`5xx` oder Transportfehler) werden transparent auf den naechsten Kandidaten retried.

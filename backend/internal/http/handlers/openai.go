@@ -140,7 +140,20 @@ func (h *Handlers) proxyToWorker(w http.ResponseWriter, r *http.Request, endpoin
 			if streamErr != nil {
 				h.metrics.IncUpstreamAttempt(endpoint, "transport_error")
 				lastErr = streamErr
-				h.logRequest(r.Context(), attemptRequestID, identity, modelName, worker.ID, duration, 502, 0, 0, 0, body, nil)
+				loggedStatus := 502
+				if status > 0 {
+					loggedStatus = status
+				}
+				h.logRequest(r.Context(), attemptRequestID, identity, modelName, worker.ID, duration, loggedStatus, 0, 0, 0, body, nil)
+
+				// If status is set, headers/body were already started on the client stream.
+				// Retrying would attempt a second response on the same HTTP stream and can
+				// result in HTTP/2 INTERNAL_ERROR on the client side.
+				if status > 0 {
+					h.metrics.IncProxyRequest(endpoint, true, "stream_terminated")
+					return
+				}
+
 				continue
 			}
 
